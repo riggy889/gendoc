@@ -3,6 +3,7 @@
 namespace App\Documents\Validation\Rules;
 
 use Brick\Money\Currency;
+use Brick\Money\CurrencyType;
 use Brick\Money\Exception\UnknownCurrencyException;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -18,9 +19,13 @@ final class Iso4217Currency implements ValidationRule
         }
 
         try {
-            Currency::of($value);
+            $current = Currency::of($value)->getCurrencyType() === CurrencyType::IsoCurrent;
         } catch (UnknownCurrencyException) {
-            $fail('The :attribute is not a recognised ISO 4217 currency code.');
+            $current = false;
+        }
+
+        if (! $current) {
+            $fail('The :attribute is not a current ISO 4217 currency code.');
         }
     }
 }

@@ -1,0 +1,242 @@
+/*
+ * Document styles, shared by the live preview and the PDF.
+ *
+ * Plain CSS (no Tailwind) so it can be inlined into the HTML sent for PDF rendering. Everything is
+ * scoped under .doc so it neither leaks into nor inherits from the editor UI.
+ */
+
+.doc {
+    --accent: #2563eb;
+    --doc-font: Arial, sans-serif;
+    --doc-text: #1f2937;
+    --doc-muted: #6b7280;
+    --doc-rule: #e5e7eb;
+
+    box-sizing: border-box;
+    color: var(--doc-text);
+    font-family: var(--doc-font);
+    font-size: 10pt;
+    line-height: 1.45;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+/* Resets use :where() so they have no specificity and never override the component styles below. */
+.doc :where(*, *::before, *::after) {
+    box-sizing: inherit;
+    margin: 0;
+    padding: 0;
+}
+
+.doc :where(h1, h2, h3, p, dl, dd) {
+    font-size: inherit;
+    font-weight: inherit;
+}
+
+/* Header: logo, title and document details */
+
+.doc-header {
+    margin-bottom: 10mm;
+}
+
+.doc-logo {
+    display: flex;
+    margin-bottom: 6mm;
+}
+
+.doc-logo--right {
+    justify-content: flex-end;
+}
+
+.doc-logo img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+.doc-header__row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8mm;
+}
+
+.doc-title {
+    color: var(--accent);
+    font-size: 24pt;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+}
+
+.doc-subtitle {
+    margin-top: 2mm;
+    color: var(--doc-muted);
+}
+
+.doc-meta {
+    display: grid;
+    gap: 1mm;
+    text-align: right;
+}
+
+.doc-meta__row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4mm;
+}
+
+.doc-meta dt {
+    color: var(--doc-muted);
+}
+
+.doc-meta dd {
+    min-width: 28mm;
+    font-weight: 600;
+}
+
+/* Addresses */
+
+.doc-addresses {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    margin-bottom: 10mm;
+}
+
+.doc-label {
+    margin-bottom: 1.5mm;
+    color: var(--accent);
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.doc-party p {
+    overflow-wrap: anywhere;
+}
+
+.doc-party__name {
+    font-weight: 600;
+}
+
+/* Line items */
+
+.doc-items {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 6mm;
+}
+
+.doc-items th {
+    padding: 2mm 2mm;
+    border-bottom: 0.5mm solid var(--accent);
+    color: var(--doc-muted);
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.doc-items td {
+    padding: 2.5mm 2mm;
+    border-bottom: 0.25mm solid var(--doc-rule);
+    vertical-align: top;
+}
+
+.doc-items th:first-child,
+.doc-items td:first-child {
+    padding-left: 0;
+}
+
+.doc-items th:last-child,
+.doc-items td:last-child {
+    padding-right: 0;
+}
+
+.doc-items__description {
+    width: 100%;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.doc-items__empty {
+    color: var(--doc-muted);
+    text-align: center;
+}
+
+.doc .doc-num {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Totals */
+
+.doc-totals {
+    width: 75mm;
+    margin-left: auto;
+    margin-bottom: 8mm;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+}
+
+.doc-totals th,
+.doc-totals td {
+    padding: 1.2mm 0;
+}
+
+.doc-totals th {
+    color: var(--doc-muted);
+    font-weight: 400;
+    text-align: left;
+}
+
+.doc-totals td {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.doc-totals__total th,
+.doc-totals__total td {
+    padding-top: 2.5mm;
+    border-top: 0.5mm solid var(--accent);
+    color: var(--doc-text);
+    font-size: 12pt;
+    font-weight: 700;
+}
+
+/* Notes and payment details */
+
+.doc-block {
+    margin-bottom: 6mm;
+}
+
+.doc-text {
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+/* Preview only: the A4 sheet the document sits on in the editor. In the PDF, @page margins do this job. */
+
+.doc-sheet {
+    box-sizing: border-box;
+    width: 210mm;
+    min-height: 297mm;
+    padding: 15mm;
+    background: #fff;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.12), 0 8px 24px rgb(0 0 0 / 0.08);
+}
+
+/* Template picker thumbnails */
+
+.doc-thumb {
+    display: block;
+    height: 100%;
+    background:
+        linear-gradient(var(--accent), var(--accent)) 0 0 / 45% 8% no-repeat,
+        repeating-linear-gradient(#cbd5e1 0 1px, transparent 1px 12%) 0 45% / 100% 40% no-repeat,
+        linear-gradient(#94a3b8, #94a3b8) 100% 92% / 40% 3% no-repeat;
+}

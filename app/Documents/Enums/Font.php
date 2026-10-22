@@ -22,4 +22,17 @@ enum Font: string
             self::PlayfairDisplay => 'Playfair Display',
         };
     }
+
+    /**
+     * The CSS font-family stack, with a generic fallback.
+     */
+    public function cssFamily(): string
+    {
+        $fallback = match ($this) {
+            self::SourceSerif4, self::Merriweather, self::PlayfairDisplay => 'Georgia, serif',
+            default => 'Arial, sans-serif',
+        };
+
+        return "'{$this->label()}', {$fallback}";
+    }
 }

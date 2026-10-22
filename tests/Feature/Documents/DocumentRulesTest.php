@@ -104,6 +104,7 @@ describe('document fields', function () {
         expect(validationErrors(['currency' => $currency])->keys())->toContain('currency');
     })->with([
         'not a currency' => ['XYZ'],
+        'withdrawn currency' => ['DEM'],
         'lowercase' => ['gbp'],
         'too short' => ['GB'],
         'not a string' => [826],

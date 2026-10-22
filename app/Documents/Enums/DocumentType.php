@@ -46,4 +46,16 @@ enum DocumentType: string
             self::CreditNote => 'CN-',
         };
     }
+
+    /**
+     * Heading for the customer's address block.
+     */
+    public function recipientLabel(): string
+    {
+        return match ($this) {
+            self::Quote => 'Quote for',
+            self::Invoice => 'Bill to',
+            self::CreditNote => 'Credit to',
+        };
+    }
 }
