@@ -12,12 +12,13 @@
     "license": "MIT",
     "require": {
         "php": "^8.4",
+        "ext-intl": "*",
         "brick/money": "^0.15.2",
+        "enshrined/svg-sanitize": "^1.1",
         "laravel/framework": "^13.17",
         "laravel/tinker": "^3.0",
         "livewire/livewire": "^4.4",
-        "spatie/laravel-pdf": "^2.14",
-        "ext-intl": "*"
+        "spatie/laravel-pdf": "^2.14"
     },
     "require-dev": {
         "larastan/larastan": "^3.13",
