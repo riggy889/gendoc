@@ -10,7 +10,19 @@
             @endforeach
         </div>
 
-        <div class="ml-auto flex items-center gap-2">
+        @if ($type === \App\Documents\Enums\DocumentType::Quote)
+            <button type="button" class="btn" wire:click="convertToInvoice">
+                <x-icon name="arrow-right" />
+                Convert to invoice
+            </button>
+        @elseif ($type === \App\Documents\Enums\DocumentType::Invoice)
+            <button type="button" class="btn" wire:click="createCreditNote">
+                <x-icon name="arrow-right" />
+                Create credit note
+            </button>
+        @endif
+
+        <div class="ml-auto flex flex-wrap items-center gap-2">
             <button
                 type="button"
                 class="btn"
@@ -18,6 +30,24 @@
             >
                 <x-icon name="file-plus" />
                 <span class="max-sm:sr-only">New</span>
+            </button>
+
+            <input
+                type="file"
+                accept="application/json,.json"
+                class="sr-only"
+                tabindex="-1"
+                aria-hidden="true"
+                x-ref="importFile"
+                x-on:change="importJson($event.target.files[0], '{{ route('documents.import') }}'); $event.target.value = ''"
+            >
+            <button type="button" class="btn" x-on:click="$refs.importFile.click()">
+                <x-icon name="file-in" />
+                <span class="max-sm:sr-only">Import</span>
+            </button>
+            <button type="button" class="btn" x-on:click="exportJson()">
+                <x-icon name="file-out" />
+                <span class="max-sm:sr-only">Export</span>
             </button>
 
             <button

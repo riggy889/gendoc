@@ -9,7 +9,8 @@
         </div>
     </div>
 
-    <main class="flex-1 lg:grid lg:min-h-0 lg:grid-cols-[3fr_2fr]">
+    {{-- Hidden until the saved draft has loaded, so the blank starting document doesn't flash up first. --}}
+    <main class="flex-1 transition-opacity lg:grid lg:min-h-0 lg:grid-cols-[3fr_2fr]" :class="restored ? '' : 'opacity-0'">
         <div id="panel-preview" role="tabpanel" aria-labelledby="tab-preview" class="hidden min-h-0 lg:block" :class="tab === 'preview' && 'max-lg:block!'">
             @include('livewire.document-editor.preview')
         </div>

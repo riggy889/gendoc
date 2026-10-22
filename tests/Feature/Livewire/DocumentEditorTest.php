@@ -248,3 +248,124 @@ it('starts a new document, keeping business details and clearing the customer', 
 
     expect(firstItem($component)['unit_price_minor'])->toBe(0);
 });
+
+describe('restoring from the browser', function () {
+    it('suggests the next number from stored numbering when there is no draft', function () {
+        editor()
+            ->call('restore', null, ['invoice' => ['prefix' => 'ACME-', 'highest' => 41]])
+            ->assertSet('document.number', 'ACME-0042')
+            ->assertSet('numbering.quote', ['prefix' => 'QUO-', 'highest' => 0])
+            ->assertSet('dirty', false);
+    });
+
+    it('restores a draft and whether it had unsaved changes', function () {
+        editor()
+            ->call('restore', documentPayload(['number' => 'INV-0007']), [], true)
+            ->assertSet('document.number', 'INV-0007')
+            ->assertSet('document.to.company_name', 'Customer Co')
+            ->assertSet('dirty', true);
+    });
+
+    it('repairs junk numbering', function () {
+        editor()
+            ->call('restore', null, ['invoice' => 'junk', 'quote' => ['prefix' => ['x'], 'highest' => -1]])
+            ->assertSet('numbering.invoice', ['prefix' => 'INV-', 'highest' => 0])
+            ->assertSet('numbering.quote', ['prefix' => 'QUO-', 'highest' => 0]);
+    });
+});
+
+describe('numbering', function () {
+    it('advances the counter after a download and clears unsaved changes', function () {
+        editor()
+            ->set('document.notes', 'Changed')
+            ->call('recordDownload', 'invoice', 'INV-0001')
+            ->assertSet('numbering.invoice.highest', 1)
+            ->assertSet('dirty', false)
+            ->call('newDocument')
+            ->assertSet('document.number', 'INV-0002');
+    });
+
+    it('never moves the counter backwards or for custom numbers', function () {
+        editor()
+            ->call('recordDownload', 'invoice', 'INV-0010')
+            ->call('recordDownload', 'invoice', 'INV-0004')
+            ->call('recordDownload', 'invoice', '2026/Smith/1')
+            ->assertSet('numbering.invoice.highest', 10);
+    });
+
+    it('suggests the new type\'s number when switching type, but keeps custom numbers', function () {
+        editor()
+            ->call('restore', null, ['quote' => ['prefix' => 'QUO-', 'highest' => 4]])
+            ->call('setType', 'quote')
+            ->assertSet('document.number', 'QUO-0005')
+            ->set('document.number', 'Job 12')
+            ->call('setType', 'invoice')
+            ->assertSet('document.number', 'Job 12');
+    });
+
+    it('updates the number as its prefix is edited', function () {
+        editor()
+            ->set('numbering.invoice.prefix', '2026-')
+            ->assertSet('document.number', '2026-0001')
+            ->assertSee('Your next new invoice will be 2026-0001.')
+            ->set('document.number', 'Custom')
+            ->set('numbering.invoice.prefix', 'X-')
+            ->assertSet('document.number', 'Custom');
+    });
+});
+
+describe('workflows', function () {
+    it('converts a quote to an invoice', function () {
+        $component = editor()
+            ->call('restore', documentPayload([
+                'type' => 'quote',
+                'number' => 'QUO-0003',
+                'issue_date' => '2026-09-01',
+                'due_date' => null,
+                'valid_until' => '2026-10-01',
+                'payment_terms_days' => 14,
+            ]), ['invoice' => ['prefix' => 'INV-', 'highest' => 8]])
+            ->assertSee('Convert to invoice')
+            ->call('convertToInvoice')
+            ->assertSet('document.type', 'invoice')
+            ->assertSet('document.number', 'INV-0009')
+            ->assertSet('document.issue_date', '2026-10-01')
+            ->assertSet('document.due_date', '2026-10-15')
+            ->assertSet('document.valid_until', null)
+            ->assertSet('document.to.company_name', 'Customer Co')
+            ->assertSet('dirty', true)
+            ->assertSee('Create credit note');
+
+        expect(editorTotals($component)->total->getMinorAmount()->toInt())->toBe(12000);
+    });
+
+    it('creates a credit note from an invoice', function () {
+        editor()
+            ->call('restore', documentPayload(['number' => 'INV-0042']), [])
+            ->call('createCreditNote')
+            ->assertSet('document.type', 'credit_note')
+            ->assertSet('document.number', 'CN-0001')
+            ->assertSet('document.original_invoice_number', 'INV-0042')
+            ->assertSet('document.due_date', null)
+            ->assertSet('document.items.0.unit_price_minor', 5000)
+            ->assertSee('Credit note for invoice INV-0042');
+    });
+
+    it('only converts from the right type', function () {
+        editor()
+            ->call('convertToInvoice')
+            ->assertSet('document.number', 'INV-0001')
+            ->call('setType', 'credit_note')
+            ->call('createCreditNote')
+            ->assertSet('document.type', 'credit_note')
+            ->assertSet('document.original_invoice_number', null);
+    });
+
+    it('marks the document saved after an export', function () {
+        editor()
+            ->set('document.notes', 'Changed')
+            ->assertSet('dirty', true)
+            ->call('markExported')
+            ->assertSet('dirty', false);
+    });
+});

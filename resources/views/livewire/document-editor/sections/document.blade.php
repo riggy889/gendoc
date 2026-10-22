@@ -1,6 +1,9 @@
 <x-editor.section id="document" title="Document">
     <div class="grid gap-4 sm:grid-cols-2">
         <x-form.input label="{{ $type->title() }} number" model="document.number" />
+        <x-form.input label="{{ $type->title() }} number prefix" model="numbering.{{ $type->value }}.prefix"
+            maxlength="{{ \App\Documents\Data\NumberSeries::MAX_PREFIX_LENGTH }}"
+            hint="Your next new {{ strtolower($type->title()) }} will be {{ $nextNumber }}." />
         <x-form.input label="Reference (optional)" model="document.reference" hint="For example, a PO number." />
         <x-form.input label="Issue date" model="document.issue_date" type="date" :live="false" />
 

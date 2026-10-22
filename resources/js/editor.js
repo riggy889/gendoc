@@ -11,6 +11,13 @@ const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
 
 const SECTION_KEY = 'gendoc.section';
+const DRAFT_KEY = 'gendoc.draft';
+const NUMBERING_KEY = 'gendoc.numbering';
+const SAVE_DELAY_MS = 500;
+
+const IMPORT_MAX_BYTES = 5 * 1024 * 1024;
+const EXPORT_VERSION = 1;
+const LOGO_DATA_URI = /^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/]+=*$/;
 
 const TOAST_MS = 8000;
 const MAX_ERROR_DETAILS = 5;
@@ -23,23 +30,38 @@ function readSetting(key, fallback) {
     }
 }
 
+/**
+ * @returns {boolean} false if storage is unavailable (private mode, blocked or full)
+ */
 function writeSetting(key, value) {
     try {
         window.localStorage.setItem(key, value);
+
+        return true;
     } catch {
-        // Storage unavailable (private mode, blocked or full); the setting just won't be remembered.
+        return false;
+    }
+}
+
+function readJson(key) {
+    try {
+        return JSON.parse(readSetting(key, 'null'));
+    } catch {
+        return null;
     }
 }
 
 /**
- * Client-side state for the editor: mobile tabs, the accordion, preview zoom and pages, and the logo.
+ * Client-side state for the editor: mobile tabs, the accordion, preview zoom and pages, the logo,
+ * and the draft and numbering saved in localStorage.
  *
  * The logo is held here rather than in Livewire so a large data URI isn't sent to the server on
- * every update. It is only sent when generating a PDF.
+ * every update. It is only sent when generating a PDF or importing a file.
  */
 export default () => {
-    // Removes the paginator's spacers; kept out of Alpine state as it isn't reactive data.
+    // Not reactive data, so kept out of Alpine state: the paginator's undo, and the pending save.
     let undoPagination = () => {};
+    let saveTimer = null;
 
     return {
         tab: 'edit',
@@ -52,6 +74,8 @@ export default () => {
         draggingLogo: false,
         downloading: false,
         toasts: [],
+        restored: false,
+        storageWarned: false,
 
         init() {
             const viewport = this.$refs.previewViewport;
@@ -84,6 +108,72 @@ export default () => {
             document.fonts.addEventListener('loadingdone', () => this.paginate());
             this.$refs.sheet?.addEventListener('load', () => this.paginate(), true);
             this.$nextTick(() => this.paginate());
+
+            // Save the draft shortly after each change, and straight away if the page is closed.
+            Livewire.hook('commit', ({ component, succeed }) => {
+                if (component.el === this.$root) {
+                    succeed(() => this.queueSave());
+                }
+            });
+            this.$watch('logo', () => this.queueSave());
+            window.addEventListener('pagehide', () => this.saveNow());
+
+            this.restore();
+        },
+
+        /**
+         * Load the saved draft and numbering into the editor. Until this finishes nothing is saved,
+         * so the blank starting document can't overwrite a stored draft.
+         */
+        async restore() {
+            const draft = readJson(DRAFT_KEY);
+            const document = draft?.document && typeof draft.document === 'object' ? draft.document : null;
+            const logo = document?.from?.logo;
+
+            this.logo = typeof logo === 'string' && LOGO_DATA_URI.test(logo) ? logo : null;
+
+            try {
+                await this.$wire.restore(document ? withoutLogo(document) : null, readJson(NUMBERING_KEY) ?? {}, draft?.dirty === true);
+            } finally {
+                this.restored = true;
+            }
+        },
+
+        queueSave() {
+            if (!this.restored) {
+                return;
+            }
+
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(() => this.saveNow(), SAVE_DELAY_MS);
+        },
+
+        saveNow() {
+            clearTimeout(saveTimer);
+
+            if (!this.restored) {
+                return;
+            }
+
+            // Numbering first: it's small, so it still saves if a large logo fills the storage.
+            const saved = writeSetting(NUMBERING_KEY, JSON.stringify(this.$wire.numbering))
+                && writeSetting(DRAFT_KEY, JSON.stringify({ document: this.currentDocument(), dirty: this.$wire.dirty }));
+
+            if (!saved && !this.storageWarned) {
+                this.storageWarned = true;
+                this.toast("Your browser isn't letting GenDoc save drafts, so your work will be lost if you close this page. Export it to keep a copy.");
+            }
+        },
+
+        /**
+         * A plain copy of the document with the logo added back in.
+         */
+        currentDocument() {
+            // $wire state is a reactive proxy, which structuredClone can't copy.
+            const document = JSON.parse(JSON.stringify(this.$wire.document));
+            document.from.logo = this.logo;
+
+            return document;
         },
 
         paginate() {
@@ -172,27 +262,17 @@ export default () => {
                 // Flush any debounced edits so the PDF matches what's on screen.
                 await this.$wire.$commit();
 
-                // A plain copy: $wire state is a reactive proxy, which structuredClone can't copy.
-                const payload = JSON.parse(JSON.stringify(this.$wire.document));
-                payload.from.logo = this.logo;
-
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Accept: 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
-                    },
-                    body: JSON.stringify(payload),
-                });
+                const payload = this.currentDocument();
+                const response = await postJson(url, payload);
 
                 if (!response.ok) {
-                    this.toast(...(await pdfErrorMessage(response)));
+                    this.toast(...(await errorMessage(response, 'Please fix these before downloading:')));
 
                     return;
                 }
 
                 saveFile(await response.blob(), downloadName(response) ?? 'document.pdf');
+                await this.$wire.recordDownload(payload.type, payload.number);
                 window.dispatchEvent(new CustomEvent('pdf-downloaded', {
                     detail: { type: payload.type, number: payload.number },
                 }));
@@ -203,9 +283,71 @@ export default () => {
             }
         },
 
-        toast(message, details = []) {
+        async exportJson() {
+            await this.$wire.$commit();
+
+            const document = this.currentDocument();
+            const file = { app: 'GenDoc', version: EXPORT_VERSION, document };
+            const name = `${document.type.replace('_', '-')}-${document.number}`.replace(/[^A-Za-z0-9._-]+/g, '-');
+
+            saveFile(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }), `${name}.json`);
+            await this.$wire.markExported();
+        },
+
+        /**
+         * Replace the document with one from an exported JSON file, after the server has checked it
+         * with the same rules as a PDF. An invalid file leaves the current document untouched.
+         */
+        async importJson(file, url) {
+            if (!file) {
+                return;
+            }
+
+            if (file.size > IMPORT_MAX_BYTES) {
+                this.toast("That file is too large to be a GenDoc document.");
+
+                return;
+            }
+
+            let data;
+
+            try {
+                data = JSON.parse(await file.text());
+            } catch {
+                this.toast("That file isn't a GenDoc JSON export.");
+
+                return;
+            }
+
+            // Accept our export wrapper or a bare document.
+            const document = data && typeof data.document === 'object' ? data.document : data;
+
+            try {
+                const response = await postJson(url, document);
+
+                if (!response.ok) {
+                    this.toast(...(await errorMessage(response, "That file couldn't be imported:")));
+
+                    return;
+                }
+
+                const { document: clean } = await response.json();
+
+                if (this.$wire.dirty && !confirm('Replace the current document with the imported one? Your current changes will be lost.')) {
+                    return;
+                }
+
+                this.logo = clean.from.logo;
+                await this.$wire.loadDraft(withoutLogo(clean));
+                this.toast('Document imported.', [], 'success');
+            } catch {
+                this.toast("Couldn't reach the server. Check your connection and try again.");
+            }
+        },
+
+        toast(message, details = [], tone = 'error') {
             const id = Date.now() + Math.random();
-            this.toasts.push({ id, message, details });
+            this.toasts.push({ id, message, details, tone });
             setTimeout(() => this.dismissToast(id), TOAST_MS + details.length * 2000);
         },
 
@@ -215,14 +357,31 @@ export default () => {
     };
 };
 
+function withoutLogo(document) {
+    return { ...document, from: { ...(document.from ?? {}), logo: null } };
+}
+
+function postJson(url, body) {
+    return fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+        },
+        body: JSON.stringify(body),
+    });
+}
+
 /**
- * A toast message (and any field errors) for a failed PDF request.
+ * A toast message (and any field errors) for a failed request.
  *
+ * @param {string} invalidHeading  the message shown above validation errors
  * @returns {Promise<[string, string[]]>}
  */
-async function pdfErrorMessage(response) {
+async function errorMessage(response, invalidHeading) {
     const body = await response.json().catch(() => ({}));
-    const fallback = "Sorry, we couldn't create your PDF. Please try again in a moment.";
+    const fallback = 'Sorry, something went wrong. Please try again in a moment.';
 
     switch (response.status) {
         case 422: {
@@ -230,7 +389,7 @@ async function pdfErrorMessage(response) {
             const extra = errors.length - MAX_ERROR_DETAILS;
             const details = errors.slice(0, MAX_ERROR_DETAILS).concat(extra > 0 ? [`…and ${extra} more`] : []);
 
-            return ['Please fix these before downloading:', details];
+            return [invalidHeading, details];
         }
         case 419:
             return ['Your session expired. Refresh the page and try again.', []];

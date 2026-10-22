@@ -10,8 +10,10 @@ use App\Documents\Enums\DiscountType;
 use App\Documents\Enums\DocumentType;
 use App\Documents\Support\CurrencyOptions;
 use App\Documents\Validation\DocumentRules;
+use App\Livewire\Concerns\ConvertsDocuments;
 use App\Livewire\Concerns\ManagesLineItems;
 use App\Livewire\Concerns\ManagesMoneyInputs;
+use App\Livewire\Concerns\ManagesNumbering;
 use App\Livewire\Concerns\ManagesTaxRates;
 use Brick\Money\Currency;
 use Carbon\CarbonImmutable;
@@ -29,14 +31,16 @@ use Livewire\Component;
  */
 class DocumentEditor extends Component
 {
+    use ConvertsDocuments;
     use ManagesLineItems;
     use ManagesMoneyInputs;
+    use ManagesNumbering;
     use ManagesTaxRates;
 
     /** @var array<string, mixed> */
     public array $document = [];
 
-    /** Whether there are changes since the document was created or last exported. */
+    /** Whether there are changes since the document was created, imported, exported or downloaded. */
     public bool $dirty = false;
 
     /** @var array<string, string> parse errors for money inputs, keyed by input name */
@@ -45,9 +49,37 @@ class DocumentEditor extends Component
 
     public function mount(): void
     {
-        $type = DocumentType::Invoice;
-        $this->document = DocumentDefaults::document($type, CarbonImmutable::today(), $type->defaultNumberPrefix().'0001');
+        $this->numbering = $this->sanitisedNumbering([]);
+        $this->document = DocumentDefaults::document(DocumentType::Invoice, CarbonImmutable::today(), $this->nextNumber(DocumentType::Invoice));
         $this->syncMoneyInputs();
+    }
+
+    /**
+     * Pick up where the browser left off: its numbering, and its saved draft if it has one.
+     *
+     * @param  array<array-key, mixed>|null  $draft
+     * @param  array<array-key, mixed>  $numbering
+     */
+    public function restore(?array $draft, array $numbering, bool $dirty = false): void
+    {
+        $this->numbering = $this->sanitisedNumbering($numbering);
+
+        if ($draft === null) {
+            $this->document['number'] = $this->nextNumber(DocumentType::Invoice);
+
+            return;
+        }
+
+        $this->loadDraft($draft);
+        $this->dirty = $dirty;
+    }
+
+    /**
+     * The document has been saved to a JSON file.
+     */
+    public function markExported(): void
+    {
+        $this->dirty = false;
     }
 
     /**
@@ -71,7 +103,7 @@ class DocumentEditor extends Component
     public function newDocument(): void
     {
         $type = DocumentType::tryFrom((string) $this->document['type']) ?? DocumentType::Invoice;
-        $fresh = DocumentDefaults::document($type, CarbonImmutable::today(), $type->defaultNumberPrefix().'0001');
+        $fresh = DocumentDefaults::document($type, CarbonImmutable::today(), $this->nextNumber($type));
 
         $this->document = array_merge($fresh, array_intersect_key($this->document, array_flip([
             'from', 'tax_rates', 'currency', 'payment_terms_days', 'payment_details', 'style',
@@ -95,9 +127,11 @@ class DocumentEditor extends Component
 
         $this->document['type'] = $new->value;
 
-        // Until numbering arrives, swap the default prefix so an "INV-" number doesn't end up on a quote.
-        if ($old !== null && str_starts_with((string) $this->document['number'], $old->defaultNumberPrefix())) {
-            $this->document['number'] = $new->defaultNumberPrefix().substr((string) $this->document['number'], strlen($old->defaultNumberPrefix()));
+        // Swap a suggested-style number (or a blank one) for the new type's next number; keep custom ones.
+        $number = trim((string) $this->document['number']);
+
+        if ($number === '' || ($old !== null && $this->series($old)->sequenceOf($number) !== null)) {
+            $this->document['number'] = $this->nextNumber($new);
         }
 
         $issueDate = $this->issueDate();
@@ -150,6 +184,7 @@ class DocumentEditor extends Component
             'preview' => $preview,
             'totals' => app(DocumentCalculator::class)->calculate($preview),
             'type' => $preview->type,
+            'nextNumber' => $this->nextNumber($preview->type),
             'currencies' => CurrencyOptions::grouped(),
             'currencySymbol' => CurrencyOptions::symbol($preview->currency),
         ]);
