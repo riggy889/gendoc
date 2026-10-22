@@ -1,5 +1,13 @@
-<div x-data="documentEditor" class="flex min-h-dvh flex-col bg-slate-100 lg:h-dvh">
+<div x-data="documentEditor" class="flex flex-1 flex-col bg-slate-100 lg:min-h-0">
     @include('livewire.document-editor.toolbar')
+
+    <section class="border-b border-slate-200 bg-white px-4 pb-3" aria-labelledby="intro-heading">
+        <h1 id="intro-heading" class="text-base font-semibold text-slate-900 sm:text-lg">Free quote, invoice and credit note generator</h1>
+        <p class="mt-0.5 max-w-3xl text-sm text-slate-600">
+            Fill in your details, choose a design and download a professional PDF. No sign-up, no watermarks, and your documents never leave your browser.
+        </p>
+        <noscript><p class="mt-2 text-sm font-medium text-red-700">GenDoc needs JavaScript to be turned on.</p></noscript>
+    </section>
 
     {{-- Mobile: switch between the editor and the preview. --}}
     <div class="sticky top-0 z-20 border-b border-slate-200 bg-white px-4 py-2 lg:hidden">
@@ -9,8 +17,8 @@
         </div>
     </div>
 
-    {{-- Hidden until the saved draft has loaded, so the blank starting document doesn't flash up first. --}}
-    <main class="flex-1 transition-opacity lg:grid lg:min-h-0 lg:grid-cols-[3fr_2fr]" :class="restored ? '' : 'opacity-0'">
+    {{-- When there's a saved draft, hidden until it has loaded so the blank starting document doesn't flash up (see home.blade.php). --}}
+    <main class="editor-main flex-1 transition-opacity lg:grid lg:min-h-0 lg:grid-cols-[3fr_2fr]" :class="restored && 'is-restored'">
         <div id="panel-preview" role="tabpanel" aria-labelledby="tab-preview" class="hidden min-h-0 lg:block" :class="tab === 'preview' && 'max-lg:block!'">
             @include('livewire.document-editor.preview')
         </div>

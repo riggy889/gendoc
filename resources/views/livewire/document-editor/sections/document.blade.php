@@ -1,4 +1,4 @@
-<x-editor.section id="document" title="Document">
+<x-editor.section id="document" title="Document" open>
     <div class="grid gap-4 sm:grid-cols-2">
         <x-form.input label="{{ $type->title() }} number" model="document.number" />
         <x-form.input label="{{ $type->title() }} number prefix" model="numbering.{{ $type->value }}.prefix"

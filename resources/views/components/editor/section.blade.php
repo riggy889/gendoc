@@ -1,4 +1,5 @@
-@props(['id', 'title'])
+{{-- $open: render expanded before Alpine starts. Only the default section (see editor.js) should set it, to avoid a layout shift on load. --}}
+@props(['id', 'title', 'open' => false])
 
 <section class="border-b border-slate-200">
     <h2>
@@ -19,7 +20,7 @@
         role="region"
         aria-labelledby="section-{{ $id }}-button"
         x-show="openSection === '{{ $id }}'"
-        x-cloak
+        @unless ($open) x-cloak @endunless
         class="space-y-4 px-5 pt-1 pb-6"
     >
         {{ $slot }}

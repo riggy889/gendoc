@@ -35,4 +35,19 @@ return [
         ],
     ],
 
+    /*
+     * The "Support this free tool" link in the footer. Hidden when empty.
+     */
+    'tips' => [
+        'url' => env('TIP_URL'),
+    ],
+
+    /*
+     * Self-hosted Umami analytics (a separate project). Nothing is rendered unless both are set.
+     */
+    'umami' => [
+        'script_url' => env('UMAMI_SCRIPT_URL'),
+        'website_id' => env('UMAMI_WEBSITE_ID'),
+    ],
+
 ];

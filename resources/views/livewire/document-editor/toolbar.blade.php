@@ -4,7 +4,12 @@
 
         <div class="segmented" role="group" aria-label="Document type">
             @foreach (\App\Documents\Enums\DocumentType::cases() as $option)
-                <button type="button" wire:click="setType('{{ $option->value }}')" aria-pressed="{{ $type === $option ? 'true' : 'false' }}">
+                <button
+                    type="button"
+                    wire:click="setType('{{ $option->value }}')"
+                    @if ($type !== $option) x-on:click="track('document_type_changed', { type: '{{ $option->value }}' })" @endif
+                    aria-pressed="{{ $type === $option ? 'true' : 'false' }}"
+                >
                     {{ $option->title() }}
                 </button>
             @endforeach

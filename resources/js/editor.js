@@ -1,4 +1,3 @@
-import DOMPurify from 'dompurify';
 import { Livewire } from '../../vendor/livewire/livewire/dist/livewire.esm';
 import { paginate } from './paginator';
 
@@ -11,6 +10,7 @@ const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
 
 const SECTION_KEY = 'gendoc.section';
+const DEFAULT_SECTION = 'document'; // rendered open by the server, see sections/document.blade.php
 const DRAFT_KEY = 'gendoc.draft';
 const NUMBERING_KEY = 'gendoc.numbering';
 const SAVE_DELAY_MS = 500;
@@ -65,7 +65,7 @@ export default () => {
 
     return {
         tab: 'edit',
-        openSection: readSetting(SECTION_KEY, 'document'),
+        openSection: readSetting(SECTION_KEY, DEFAULT_SECTION),
         zoom: 'fit',
         scale: 1,
         pages: 1,
@@ -249,7 +249,6 @@ export default () => {
 
         /**
          * Send the document, with the logo from Alpine state, to the server and save the PDF.
-         * Dispatches `pdf-downloaded` on success, for numbering and analytics to hook into.
          */
         async downloadPdf(url) {
             if (this.downloading) {
@@ -273,9 +272,7 @@ export default () => {
 
                 saveFile(await response.blob(), downloadName(response) ?? 'document.pdf');
                 await this.$wire.recordDownload(payload.type, payload.number);
-                window.dispatchEvent(new CustomEvent('pdf-downloaded', {
-                    detail: { type: payload.type, number: payload.number },
-                }));
+                this.track('pdf_downloaded', { type: payload.type });
             } catch {
                 this.toast("Couldn't reach the server. Check your connection and try again.");
             } finally {
@@ -343,6 +340,14 @@ export default () => {
             } catch {
                 this.toast("Couldn't reach the server. Check your connection and try again.");
             }
+        },
+
+        /**
+         * Record an analytics event, if Umami is set up. Only ever pass the document type here,
+         * never anything the user typed.
+         */
+        track(event, { type }) {
+            window.umami?.track(event, { type });
         },
 
         toast(message, details = [], tone = 'error') {
@@ -423,6 +428,8 @@ function saveFile(blob, filename) {
 }
 
 async function sanitisedSvg(file) {
+    // Loaded on demand, as only SVG logos need it.
+    const { default: DOMPurify } = await import('dompurify');
     const clean = DOMPurify.sanitize(await file.text(), {
         USE_PROFILES: { svg: true, svgFilters: true },
     });

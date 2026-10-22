@@ -13,6 +13,10 @@
     display: none !important;
 }
 
+.has-draft .editor-main:not(.is-restored) {
+    opacity: 0;
+}
+
 @layer components {
     .label {
         @apply mb-1 block text-sm font-medium text-slate-700;
