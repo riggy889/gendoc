@@ -50,19 +50,24 @@ Each document has the following fields:
 - `number`: string, auto-suggested and editable (format described below)
 - `issue_date`: date
 - `due_date`: date. Used on **invoices only**.
-- `valid_until`: date. Used on **quotes only**.
+- `valid_until`: date. Used on **quotes only**. Defaults to `issue_date` plus 30 days, and is editable.
 - `payment_terms_days`: one of 7, 14, 30 or 60, or `null` for custom. Selecting a value sets `due_date` to `issue_date` plus that many days.
+  - On quotes, payment terms are shown as an informational line (e.g. "Payment terms: 30 days") and carry over when the quote is converted to an invoice. Due dates are only calculated on invoices.
 - `original_invoice_number`: string. Used on **credit notes only**, and required for them.
 - `reference`: optional free text, such as a PO number
 - `currency`: an ISO 4217 code, applied to the whole document. The dropdown lists common currencies first (GBP, EUR, USD, CAD, AUD, …), then all others alphabetically, each shown with its symbol.
-- `prices_include_tax`: bool, default `false`
 - `from`: the business details
-  - `company_name`, `logo` (data URI or null), `address_line_1`, `address_line_2`, `city`, `region`, `postcode`, `country`
+  - `company_name`, `logo` (data URI or null), `logo_width` (integer px on the page, 40–240, default 120), `logo_align` (`left` | `right`, default `left`), `address_line_1`, `address_line_2`, `city`, `region`, `postcode`, `country`
   - optional: `email`, `phone`, `website`, `tax_number` (e.g. a VAT number)
 - `to`: the customer details. Same address fields as `from`, plus optional `contact_name`, `email` and `tax_number`.
-- `tax_rates`: user-defined list of `{ id, name, rate_percent }`. Default: one rate, "VAT 20%". A "No tax" (0%) option is always available.
+- `tax_rates`: user-defined list of `{ id, name, rate_percent }`. Default: one rate, "VAT 20%".
+  - `rate_percent` is a decimal string with up to 3 decimal places (e.g. `8.875`), from 0 to 100.
+  - A "No tax" (0%) option is always available. It uses the reserved id `none`, is not stored in `tax_rates`, and cannot be renamed or deleted. If a rate is deleted, items using it fall back to `none`.
 - `items`: list of `{ id (uuid), description, quantity, unit_price_minor, tax_rate_id, discount: { type: percent|fixed, value } | null }`
+  - `quantity` is a decimal string with up to 4 decimal places, from 0 to 1,000,000.
+  - `unit_price_minor` is always a **net** (tax-exclusive) price. Tax-inclusive price entry is not supported.
 - `document_discount`: `{ type: percent|fixed, value } | null`
+- Discount `value`: for `percent`, a decimal string with up to 2 decimal places, from 0 to 100; for `fixed`, an integer in minor units (e.g. `500` for £5.00).
 - `notes`: multiline text
 - `payment_details`: multiline, fully customisable free text, shown at the bottom of the document. Placeholder: bank name, account name, sort code, account number, IBAN, payment reference.
 - `style`: `{ template: classic|modern|minimal|bold, accent_color: hex, font: <one of 6>, date_format }`
@@ -74,9 +79,11 @@ Paper size is **A4 only**.
 
 Implement these in `App\Documents\DocumentCalculator`, which returns a `DocumentTotals` DTO. Unit-test every rule.
 
-1. **Line gross** = quantity × unit price.
+All amounts are net (tax-exclusive). Tax is always added on top.
+
+1. **Line amount** = quantity × unit price, **rounded half-up to the currency's minor units per line** (e.g. 2.5 × £33.33 = £83.325 → £83.33).
 2. **Line discount:**
-   - A percentage discount is a percentage of the line gross.
+   - A percentage discount is a percentage of the line amount, rounded half-up to minor units.
    - A fixed discount is clamped so the line never goes below 0.
 3. **Document discount:**
    - Applied after line discounts and before tax.
@@ -84,21 +91,18 @@ Implement these in `App\Documents\DocumentCalculator`, which returns a `Document
    - A fixed amount is clamped to the discounted subtotal.
    - Put any rounding remainder from the allocation on the largest line, so the totals reconcile exactly.
 4. **Tax is calculated per tax-rate group**, on that group's discounted net. Round **once per group**, half-up, to the currency's minor units.
-5. **When prices include tax:**
-   - Entered prices are treated as gross.
-   - Extract net as gross ÷ (1 + rate) per group.
-   - The displayed totals must still reconcile: net + tax = gross.
-6. **Zero-decimal currencies** (e.g. JPY, KRW) must work correctly. Use brick/money's currency context, not a hardcoded 2 decimal places.
-7. **Totals shown on the document:**
-   - Subtotal
-   - Discounts, shown only if any exist
+5. **Zero-decimal currencies** (e.g. JPY, KRW) must work correctly. Use brick/money's currency context, not a hardcoded 2 decimal places.
+6. **Totals shown on the document:**
+   - Line discounts are shown on their rows in the items table; each row's amount is already discounted.
+   - Subtotal (the sum of the discounted line amounts)
+   - Document discount, shown only if one exists, labelled with its rate when it is a percentage, e.g. "Discount (10%)"
    - Net
    - One tax line per rate, e.g. "VAT 20%"
    - **Total**
    
    The total is labelled **"Amount due"** on invoices, **"Total"** on quotes and **"Total credit"** on credit notes.
-8. **Credit notes show positive amounts** under the "Credit Note" title. Do not use negative numbers.
-9. If quantity is 0 or there are no items, the totals are 0. Never divide by zero.
+7. **Credit notes show positive amounts** under the "Credit Note" title. Do not use negative numbers.
+8. If quantity is 0 or there are no items, the totals are 0. Never divide by zero.
 
 ## 6. UI and layout
 
@@ -123,7 +127,7 @@ Implement these in `App\Documents\DocumentCalculator`, which returns a `Document
   4. **Line items:**
      - Add, remove and duplicate items; reorder by drag handle, with up/down buttons for keyboard users.
      - Fields per row: description (multiline), quantity, unit price, tax rate select, and an optional line discount.
-  5. **Tax & discounts:** manage tax rates, the tax-inclusive toggle, and the document-level discount
+  5. **Tax & discounts:** manage tax rates and the document-level discount
   6. **Notes & payment details**
   7. **Style:** template picker (thumbnail cards), accent colour picker with 8 presets plus custom hex, font select (each option previewed in its own font), date format
 - **Live updates:** use `wire:model.live.debounce.300ms` for text inputs and immediate updates for selects and toggles. The preview must never flash or reset scroll position.
@@ -167,9 +171,11 @@ Implement these in `App\Documents\DocumentCalculator`, which returns a `Document
 
 ## 8. Numbering
 
-- Keep a per-type counter in localStorage. The default formats are `QUO-0001`, `INV-0001` and `CN-0001`, and the prefix is editable in the Document section.
-- When a new document is created, suggest the next number. The number field is always editable.
-- Increment the counter **only after a successful PDF download** of that number.
+- Keep a per-type **"highest number used"** in localStorage, plus a per-type prefix. The default formats are `QUO-0001`, `INV-0001` and `CN-0001`, and each type's prefix is editable in the Document section.
+- When a new document is created, suggest the next number: the prefix plus (highest used + 1), zero-padded to 4 digits. Padding grows naturally past 9999. The number field is always editable.
+- Update the counter **only after a successful PDF download**:
+  - If the downloaded number matches `{prefix}{digits}` for that type, set the highest used to the maximum of its current value and those digits. The counter only ever moves forward, so re-downloading an older number never moves it back and numbers never repeat.
+  - If the number doesn't match the pattern (e.g. `2026/Smith/1`), leave the counter alone.
 
 ## 9. PDF endpoint and security
 
@@ -193,6 +199,7 @@ Implement these in `App\Documents\DocumentCalculator`, which returns a `Document
   - Set a render timeout of 20 seconds or less.
   - Store nothing on disk and log no document contents.
   - Add security headers: CSP, `X-Content-Type-Options` and `Referrer-Policy`.
+    - The CSP allows `'unsafe-eval'` in `script-src`, because standard Alpine.js evaluates expressions at runtime. This is a deliberate trade-off (all user text is escaped by Blade); note it in the code. Everything else stays strict.
 - **Error handling:**
   - If PDF generation fails, show a toast in the UI and log the error with no payload.
   - If a JSON import is invalid, show the field errors and keep the existing draft untouched.
@@ -202,7 +209,7 @@ Implement these in `App\Documents\DocumentCalculator`, which returns a `Document
 
 Write Pest tests covering:
 
-- **Calculator:** line discounts, document discount allocation, multiple tax rates, tax-inclusive pricing, zero-decimal currency, the rounding reconciliation rule, credit note labels, and empty documents.
+- **Calculator:** line rounding, line discounts, document discount allocation, multiple tax rates, zero-decimal currency, the rounding reconciliation rule, credit note labels, and empty documents.
 - **Validation:** valid and invalid payloads, an oversized logo, a malicious SVG, a bad currency code, and too many items.
 - **PDF endpoint:**
   - A successful download, tested with `Pdf::fake()` and the package's assertions
