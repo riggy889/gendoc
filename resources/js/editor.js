@@ -12,6 +12,9 @@ const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
 
 const SECTION_KEY = 'gendoc.section';
 
+const TOAST_MS = 8000;
+const MAX_ERROR_DETAILS = 5;
+
 function readSetting(key, fallback) {
     try {
         return window.localStorage.getItem(key) ?? fallback;
@@ -47,6 +50,8 @@ export default () => {
         logo: null,
         logoError: null,
         draggingLogo: false,
+        downloading: false,
+        toasts: [],
 
         init() {
             const viewport = this.$refs.previewViewport;
@@ -151,8 +156,112 @@ export default () => {
             this.logo = null;
             this.logoError = null;
         },
+
+        /**
+         * Send the document, with the logo from Alpine state, to the server and save the PDF.
+         * Dispatches `pdf-downloaded` on success, for numbering and analytics to hook into.
+         */
+        async downloadPdf(url) {
+            if (this.downloading) {
+                return;
+            }
+
+            this.downloading = true;
+
+            try {
+                // Flush any debounced edits so the PDF matches what's on screen.
+                await this.$wire.$commit();
+
+                // A plain copy: $wire state is a reactive proxy, which structuredClone can't copy.
+                const payload = JSON.parse(JSON.stringify(this.$wire.document));
+                payload.from.logo = this.logo;
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                if (!response.ok) {
+                    this.toast(...(await pdfErrorMessage(response)));
+
+                    return;
+                }
+
+                saveFile(await response.blob(), downloadName(response) ?? 'document.pdf');
+                window.dispatchEvent(new CustomEvent('pdf-downloaded', {
+                    detail: { type: payload.type, number: payload.number },
+                }));
+            } catch {
+                this.toast("Couldn't reach the server. Check your connection and try again.");
+            } finally {
+                this.downloading = false;
+            }
+        },
+
+        toast(message, details = []) {
+            const id = Date.now() + Math.random();
+            this.toasts.push({ id, message, details });
+            setTimeout(() => this.dismissToast(id), TOAST_MS + details.length * 2000);
+        },
+
+        dismissToast(id) {
+            this.toasts = this.toasts.filter((toast) => toast.id !== id);
+        },
     };
 };
+
+/**
+ * A toast message (and any field errors) for a failed PDF request.
+ *
+ * @returns {Promise<[string, string[]]>}
+ */
+async function pdfErrorMessage(response) {
+    const body = await response.json().catch(() => ({}));
+    const fallback = "Sorry, we couldn't create your PDF. Please try again in a moment.";
+
+    switch (response.status) {
+        case 422: {
+            const errors = Object.values(body.errors ?? {}).flat();
+            const extra = errors.length - MAX_ERROR_DETAILS;
+            const details = errors.slice(0, MAX_ERROR_DETAILS).concat(extra > 0 ? [`…and ${extra} more`] : []);
+
+            return ['Please fix these before downloading:', details];
+        }
+        case 419:
+            return ['Your session expired. Refresh the page and try again.', []];
+        case 413:
+            return ['This document is too large to send. Try a smaller logo.', []];
+        case 429:
+        case 503:
+            return [body.message ?? fallback, []];
+        default:
+            return [fallback, []];
+    }
+}
+
+/**
+ * The filename from a Content-Disposition header.
+ */
+function downloadName(response) {
+    const header = response.headers.get('Content-Disposition') ?? '';
+
+    return header.match(/filename="?([^";]+)"?/)?.[1] ?? null;
+}
+
+function saveFile(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = Object.assign(document.createElement('a'), { href: url, download: filename });
+
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 async function sanitisedSvg(file) {
     const clean = DOMPurify.sanitize(await file.text(), {

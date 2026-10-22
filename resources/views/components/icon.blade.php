@@ -11,6 +11,8 @@
         @case('plus') <path d="M12 5v14M5 12h14"/> @break
         @case('x') <path d="M18 6 6 18M6 6l12 12"/> @break
         @case('upload') <path d="M12 16V4m0 0-4 4m4-4 4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/> @break
+        @case('download') <path d="M12 4v12m0 0-4-4m4 4 4-4"/><path d="M4 18v2h16v-2"/> @break
+        @case('loader') <path d="M21 12a9 9 0 1 1-6.22-8.56"/> @break
         @case('file-plus') <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 12v6M9 15h6"/> @break
     @endswitch
 </svg>

@@ -19,6 +19,18 @@
                 <x-icon name="file-plus" />
                 <span class="max-sm:sr-only">New</span>
             </button>
+
+            <button
+                type="button"
+                class="btn btn-primary"
+                x-on:click="downloadPdf('{{ route('documents.pdf') }}')"
+                x-bind:disabled="downloading"
+                x-bind:aria-busy="downloading"
+            >
+                <x-icon name="download" x-show="! downloading" />
+                <x-icon name="loader" class="animate-spin" x-show="downloading" x-cloak />
+                Download PDF
+            </button>
         </div>
     </div>
 </header>

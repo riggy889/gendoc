@@ -25,4 +25,6 @@
             @include('livewire.document-editor.sections.style')
         </div>
     </main>
+
+    @include('livewire.document-editor.toasts')
 </div>

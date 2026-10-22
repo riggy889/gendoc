@@ -83,6 +83,50 @@ final class DocumentRules
     }
 
     /**
+     * Readable names for fields in error messages, e.g. "item 1 quantity" rather than "items.0.quantity".
+     *
+     * @return array<string, string>
+     */
+    public static function attributes(): array
+    {
+        $names = [
+            'number' => 'document number',
+            'issue_date' => 'issue date',
+            'due_date' => 'due date',
+            'valid_until' => '"valid until" date',
+            'payment_terms_days' => 'payment terms',
+            'original_invoice_number' => 'original invoice number',
+            'from.logo' => 'logo',
+            'from.logo_width' => 'logo size',
+            'from.logo_align' => 'logo alignment',
+            'from.phone' => 'business phone',
+            'from.website' => 'business website',
+            'to.contact_name' => 'customer contact name',
+            'tax_rates.*.name' => 'tax rate name',
+            'tax_rates.*.rate_percent' => 'tax rate',
+            'items.*.description' => 'item :position description',
+            'items.*.quantity' => 'item :position quantity',
+            'items.*.unit_price_minor' => 'item :position unit price',
+            'items.*.tax_rate_id' => 'item :position tax rate',
+            'items.*.discount' => 'item :position discount',
+            'document_discount' => 'document discount',
+            'payment_details' => 'payment details',
+            'style.template' => 'template',
+            'style.accent_color' => 'accent colour',
+            'style.font' => 'font',
+            'style.date_format' => 'date format',
+        ];
+
+        foreach (['from' => 'business', 'to' => 'customer'] as $party => $label) {
+            foreach (['company_name' => 'name', 'address_line_1' => 'address line 1', 'address_line_2' => 'address line 2', 'city' => 'city', 'region' => 'region', 'postcode' => 'postcode', 'country' => 'country', 'email' => 'email', 'tax_number' => 'tax number'] as $field => $name) {
+                $names["{$party}.{$field}"] = "{$label} {$name}";
+            }
+        }
+
+        return $names;
+    }
+
+    /**
      * Rules shared by the "from" and "to" parties.
      *
      * @return array<string, list<string>>

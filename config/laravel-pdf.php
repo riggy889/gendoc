@@ -91,6 +91,11 @@ return [
         'url' => env('GOTENBERG_URL', 'http://gotenberg:3000'),
         'username' => env('GOTENBERG_USERNAME'),
         'password' => env('GOTENBERG_PASSWORD'),
+
+        /*
+         * Seconds to wait for a render before giving up (see App\Pdf\TimedGotenbergDriver).
+         */
+        'timeout' => (int) env('GOTENBERG_TIMEOUT', 20),
     ],
 
     /*
