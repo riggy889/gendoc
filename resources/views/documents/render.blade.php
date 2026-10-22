@@ -11,9 +11,6 @@
     $template = view()->exists($template) ? $template : 'documents.templates.classic';
 @endphp
 
-<article
-    class="doc doc--{{ $document->style->template->value }}"
-    style="--accent: {{ $document->style->accentColor }}; --doc-font: {{ $document->style->font->cssFamily() }};"
->
+<article class="doc doc--{{ $document->style->template->value }}" style="{{ $document->style->cssVariables() }}">
     @include($template)
 </article>

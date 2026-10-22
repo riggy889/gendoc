@@ -1,4 +1,6 @@
 import DOMPurify from 'dompurify';
+import { Livewire } from '../../vendor/livewire/livewire/dist/livewire.esm';
+import { paginate } from './paginator';
 
 // A4 is 210mm wide; at 96 CSS pixels per inch that's ~793.7px.
 const A4_WIDTH_PX = (210 / 25.4) * 96;
@@ -27,85 +29,130 @@ function writeSetting(key, value) {
 }
 
 /**
- * Client-side state for the editor: mobile tabs, the accordion, preview zoom and the logo.
+ * Client-side state for the editor: mobile tabs, the accordion, preview zoom and pages, and the logo.
  *
  * The logo is held here rather than in Livewire so a large data URI isn't sent to the server on
  * every update. It is only sent when generating a PDF.
  */
-export default () => ({
-    tab: 'edit',
-    openSection: readSetting(SECTION_KEY, 'document'),
-    zoom: 'fit',
-    scale: 1,
-    logo: null,
-    logoError: null,
-    draggingLogo: false,
+export default () => {
+    // Removes the paginator's spacers; kept out of Alpine state as it isn't reactive data.
+    let undoPagination = () => {};
 
-    init() {
-        const viewport = this.$refs.previewViewport;
+    return {
+        tab: 'edit',
+        openSection: readSetting(SECTION_KEY, 'document'),
+        zoom: 'fit',
+        scale: 1,
+        pages: 1,
+        logo: null,
+        logoError: null,
+        draggingLogo: false,
 
-        if (viewport) {
-            new ResizeObserver(() => this.updateScale()).observe(viewport);
-        }
+        init() {
+            const viewport = this.$refs.previewViewport;
 
-        this.$watch('zoom', () => this.updateScale());
-        this.$watch('tab', () => this.$nextTick(() => this.updateScale()));
-    },
+            if (viewport) {
+                new ResizeObserver(() => this.updateScale()).observe(viewport);
+            }
 
-    toggleSection(id) {
-        this.openSection = this.openSection === id ? '' : id;
-        writeSetting(SECTION_KEY, this.openSection);
-    },
+            this.$watch('zoom', () => this.updateScale());
+            this.$watch('tab', () => this.$nextTick(() => {
+                this.updateScale();
+                this.paginate();
+            }));
+            this.$watch('logo', () => this.$nextTick(() => this.paginate()));
 
-    updateScale() {
-        if (this.zoom !== 'fit') {
-            this.scale = this.zoom;
+            // Spacers must be gone before Livewire diffs the preview, then are worked out afresh.
+            Livewire.hook('morph', ({ component }) => {
+                if (component.el === this.$root) {
+                    undoPagination();
+                    undoPagination = () => {};
+                }
+            });
+            Livewire.hook('morphed', ({ component }) => {
+                if (component.el === this.$root) {
+                    this.paginate();
+                }
+            });
 
-            return;
-        }
+            // Fonts and the logo change the layout once they load.
+            document.fonts.addEventListener('loadingdone', () => this.paginate());
+            this.$refs.sheet?.addEventListener('load', () => this.paginate(), true);
+            this.$nextTick(() => this.paginate());
+        },
 
-        const available = (this.$refs.previewViewport?.clientWidth ?? A4_WIDTH_PX) - PREVIEW_GUTTER_PX;
-        this.scale = Math.max(0.2, Math.min(1, available / A4_WIDTH_PX));
-    },
+        paginate() {
+            const sheet = this.$refs.sheet;
+            const article = sheet?.querySelector(':scope > .doc');
 
-    async setLogo(file) {
-        this.logoError = null;
+            undoPagination();
+            undoPagination = () => {};
 
-        if (!file) {
-            return;
-        }
+            // Skip while the preview is hidden (the mobile edit tab); it is laid out when shown.
+            if (!article || sheet.getBoundingClientRect().width === 0) {
+                return;
+            }
 
-        if (!LOGO_TYPES.includes(file.type)) {
-            this.logoError = 'Choose a PNG, JPEG, WebP or SVG image.';
+            const result = paginate(article, sheet.getBoundingClientRect().width / A4_WIDTH_PX);
+            this.pages = result.pages;
+            undoPagination = result.undo;
+        },
 
-            return;
-        }
+        toggleSection(id) {
+            this.openSection = this.openSection === id ? '' : id;
+            writeSetting(SECTION_KEY, this.openSection);
+        },
 
-        try {
-            const dataUri = file.type === 'image/svg+xml' ? await sanitisedSvg(file) : await resizedRaster(file);
-
-            if (dataUriBytes(dataUri) > LOGO_MAX_BYTES) {
-                this.logoError = 'That logo is still over 2 MB after resizing. Try a smaller image.';
+        updateScale() {
+            if (this.zoom !== 'fit') {
+                this.scale = this.zoom;
 
                 return;
             }
 
-            this.logo = dataUri;
-        } catch {
-            this.logoError = "That file couldn't be read as an image.";
-        }
-    },
+            const available = (this.$refs.previewViewport?.clientWidth ?? A4_WIDTH_PX) - PREVIEW_GUTTER_PX;
+            this.scale = Math.max(0.2, Math.min(1, available / A4_WIDTH_PX));
+        },
 
-    dropLogo(event) {
-        this.draggingLogo = false;
-        this.setLogo(event.dataTransfer?.files?.[0]);
-    },
+        async setLogo(file) {
+            this.logoError = null;
 
-    removeLogo() {
-        this.logo = null;
-        this.logoError = null;
-    },
-});
+            if (!file) {
+                return;
+            }
+
+            if (!LOGO_TYPES.includes(file.type)) {
+                this.logoError = 'Choose a PNG, JPEG, WebP or SVG image.';
+
+                return;
+            }
+
+            try {
+                const dataUri = file.type === 'image/svg+xml' ? await sanitisedSvg(file) : await resizedRaster(file);
+
+                if (dataUriBytes(dataUri) > LOGO_MAX_BYTES) {
+                    this.logoError = 'That logo is still over 2 MB after resizing. Try a smaller image.';
+
+                    return;
+                }
+
+                this.logo = dataUri;
+            } catch {
+                this.logoError = "That file couldn't be read as an image.";
+            }
+        },
+
+        dropLogo(event) {
+            this.draggingLogo = false;
+            this.setLogo(event.dataTransfer?.files?.[0]);
+        },
+
+        removeLogo() {
+            this.logo = null;
+            this.logoError = null;
+        },
+    };
+};
 
 async function sanitisedSvg(file) {
     const clean = DOMPurify.sanitize(await file.text(), {

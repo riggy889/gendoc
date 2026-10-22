@@ -7,6 +7,8 @@
 
 .doc {
     --accent: #2563eb;
+    --accent-text: #2563eb; /* the accent, darkened if needed to read as text on white */
+    --accent-ink: #ffffff; /* text on an accent-filled background */
     --doc-font: Arial, sans-serif;
     --doc-text: #1f2937;
     --doc-muted: #6b7280;
@@ -62,7 +64,7 @@
 }
 
 .doc-title {
-    color: var(--accent);
+    color: var(--accent-text);
     font-size: 24pt;
     font-weight: 700;
     letter-spacing: -0.01em;
@@ -106,7 +108,7 @@
 
 .doc-label {
     margin-bottom: 1.5mm;
-    color: var(--accent);
+    color: var(--accent-text);
     font-size: 8pt;
     font-weight: 700;
     letter-spacing: 0.06em;
@@ -219,24 +221,218 @@
     overflow-wrap: anywhere;
 }
 
-/* Preview only: the A4 sheet the document sits on in the editor. In the PDF, @page margins do this job. */
+/* Modern: an accent band across the top, tinted table header and a filled total */
+
+.doc--modern {
+    border-top: 2.5mm solid var(--accent);
+    padding-top: 8mm;
+}
+
+.doc--modern .doc-title {
+    color: var(--doc-text);
+    font-size: 28pt;
+    font-weight: 800;
+}
+
+.doc--modern .doc-items th {
+    padding: 2mm;
+    border-bottom: 0;
+    background: color-mix(in srgb, var(--accent) 12%, #fff);
+    color: var(--doc-text);
+}
+
+.doc--modern .doc-items td:first-child,
+.doc--modern .doc-items th:first-child {
+    padding-left: 2mm;
+}
+
+.doc--modern .doc-items td:last-child,
+.doc--modern .doc-items th:last-child {
+    padding-right: 2mm;
+}
+
+.doc--modern .doc-totals__total th,
+.doc--modern .doc-totals__total td {
+    padding: 2.5mm 2mm;
+    border-top: 0;
+    background: var(--accent);
+    color: var(--accent-ink);
+}
+
+.doc-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+}
+
+/* Minimal: monochrome type and hairlines, with the accent kept to a single rule */
+
+.doc--minimal .doc-title {
+    color: var(--doc-text);
+    font-size: 18pt;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+}
+
+.doc--minimal .doc-header__row {
+    padding-bottom: 6mm;
+    border-bottom: 0.25mm solid var(--accent);
+}
+
+.doc--minimal .doc-label {
+    color: var(--doc-muted);
+    font-weight: 400;
+}
+
+.doc--minimal .doc-meta dd,
+.doc--minimal .doc-party__name {
+    font-weight: 500;
+}
+
+.doc--minimal .doc-items th {
+    border-bottom: 0.25mm solid var(--doc-text);
+    font-weight: 400;
+}
+
+.doc--minimal .doc-totals__total th,
+.doc--minimal .doc-totals__total td {
+    border-top: 0.25mm solid var(--doc-text);
+    font-weight: 600;
+}
+
+/* Bold: an accent-filled title block, table header and total */
+
+.doc--bold .doc-header__row {
+    align-items: center;
+    padding: 7mm 8mm;
+    border-radius: 2mm;
+    background: var(--accent);
+    color: var(--accent-ink);
+}
+
+.doc--bold .doc-title {
+    color: inherit;
+    font-size: 30pt;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.doc--bold .doc-subtitle,
+.doc--bold .doc-meta dt {
+    color: inherit;
+    opacity: 0.8;
+}
+
+.doc--bold .doc-items th {
+    padding: 2mm;
+    border-bottom: 0;
+    background: var(--accent);
+    color: var(--accent-ink);
+}
+
+.doc--bold .doc-items td:first-child,
+.doc--bold .doc-items th:first-child {
+    padding-left: 2mm;
+}
+
+.doc--bold .doc-items td:last-child,
+.doc--bold .doc-items th:last-child {
+    padding-right: 2mm;
+}
+
+.doc--bold .doc-totals__total th,
+.doc--bold .doc-totals__total td {
+    padding: 3mm 2mm;
+    border-top: 0;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 13pt;
+}
+
+/*
+ * Print: A4 with 15mm margins. The items header repeats on every page, rows never split, and the
+ * closing blocks stay together where they fit. The preview paginator (resources/js/paginator.js)
+ * follows the same rules so the preview matches the PDF.
+ */
+
+@page {
+    size: A4;
+    margin: 15mm;
+}
+
+.doc-items thead {
+    display: table-header-group;
+}
+
+.doc-items tr,
+.doc-end,
+.doc-end > *,
+.doc-block {
+    break-inside: avoid;
+}
+
+/*
+ * Preview only: the A4 pages the document sits on in the editor. In the PDF, @page margins do this
+ * job. The page count comes from the paginator; pages are 297mm tall with an 8mm gap between them.
+ */
 
 .doc-sheet {
+    --pages: 1;
+
+    position: relative;
     box-sizing: border-box;
     width: 210mm;
-    min-height: 297mm;
+    height: calc(var(--pages) * 305mm - 8mm);
     padding: 15mm;
+}
+
+.doc-sheet__page {
+    position: absolute;
+    left: 0;
+    width: 210mm;
+    height: 297mm;
     background: #fff;
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.12), 0 8px 24px rgb(0 0 0 / 0.08);
 }
 
-/* Template picker thumbnails */
+.doc-sheet > .doc {
+    position: relative;
+}
+
+/* Template picker thumbnails: a rough sketch of each layout */
 
 .doc-thumb {
+    --rules: repeating-linear-gradient(#cbd5e1 0 1px, transparent 1px 12%) 0 45% / 100% 40% no-repeat;
+
     display: block;
     height: 100%;
     background:
         linear-gradient(var(--accent), var(--accent)) 0 0 / 45% 8% no-repeat,
-        repeating-linear-gradient(#cbd5e1 0 1px, transparent 1px 12%) 0 45% / 100% 40% no-repeat,
+        var(--rules),
         linear-gradient(#94a3b8, #94a3b8) 100% 92% / 40% 3% no-repeat;
+}
+
+.doc-thumb--modern {
+    background:
+        linear-gradient(var(--accent), var(--accent)) 0 0 / 100% 3% no-repeat,
+        linear-gradient(#334155, #334155) 0 10% / 50% 7% no-repeat,
+        linear-gradient(color-mix(in srgb, var(--accent) 20%, #fff), color-mix(in srgb, var(--accent) 20%, #fff)) 0 30% / 100% 6% no-repeat,
+        var(--rules),
+        linear-gradient(var(--accent), var(--accent)) 100% 92% / 45% 6% no-repeat;
+}
+
+.doc-thumb--minimal {
+    background:
+        linear-gradient(#64748b, #64748b) 0 2% / 35% 4% no-repeat,
+        linear-gradient(var(--accent), var(--accent)) 0 14% / 100% 1px no-repeat,
+        var(--rules),
+        linear-gradient(#94a3b8, #94a3b8) 100% 92% / 40% 2% no-repeat;
+}
+
+.doc-thumb--bold {
+    background:
+        linear-gradient(var(--accent), var(--accent)) 0 0 / 100% 16% no-repeat,
+        linear-gradient(var(--accent), var(--accent)) 0 30% / 100% 5% no-repeat,
+        var(--rules),
+        linear-gradient(var(--accent), var(--accent)) 100% 92% / 45% 6% no-repeat;
 }

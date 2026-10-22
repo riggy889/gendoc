@@ -5,6 +5,7 @@ namespace App\Documents\Data;
 use App\Documents\Enums\DateFormat;
 use App\Documents\Enums\Font;
 use App\Documents\Enums\Template;
+use App\Documents\Support\AccentColour;
 
 final readonly class DocumentStyle
 {
@@ -28,6 +29,21 @@ final readonly class DocumentStyle
             font: Font::from((string) $data['font']),
             dateFormat: DateFormat::from((string) $data['date_format']),
         );
+    }
+
+    /**
+     * The CSS custom properties the document stylesheet reads, as an inline style attribute value.
+     */
+    public function cssVariables(): string
+    {
+        $variables = [
+            '--accent' => $this->accentColor,
+            '--accent-text' => AccentColour::asText($this->accentColor),
+            '--accent-ink' => AccentColour::onAccent($this->accentColor),
+            '--doc-font' => $this->font->cssFamily(),
+        ];
+
+        return implode(' ', array_map(fn (string $name, string $value) => "{$name}: {$value};", array_keys($variables), $variables));
     }
 
     /**

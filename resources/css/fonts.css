@@ -1,0 +1,14 @@
+/*
+ * The six document fonts, self-hosted from @fontsource. Keep in step with App\Documents\Enums\Font::stylesheets().
+ *
+ * Browsers only download a font file once text actually uses it, so importing all six costs nothing
+ * until a font is picked.
+ */
+
+@import '@fontsource-variable/inter/wght.css';
+@import '@fontsource-variable/roboto/wght.css';
+@import '@fontsource/lato/400.css';
+@import '@fontsource/lato/700.css';
+@import '@fontsource-variable/source-serif-4/wght.css';
+@import '@fontsource-variable/merriweather/wght.css';
+@import '@fontsource-variable/playfair-display/wght.css';

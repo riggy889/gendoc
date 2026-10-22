@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import './fonts.css';
 @import './document.css';
 
 @source '../../storage/framework/views/*.php';

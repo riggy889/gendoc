@@ -10,7 +10,13 @@
 
     <div x-ref="previewViewport" class="min-h-0 flex-1 overflow-auto bg-slate-300/70 p-4" aria-label="Document preview" role="region">
         <div class="mx-auto w-fit" :style="`zoom: ${scale}`">
-            <div class="doc-sheet">
+            <div x-ref="sheet" class="doc-sheet" :style="`--pages: ${pages}`">
+                {{-- The page backgrounds, one per page the paginator counts. --}}
+                <div wire:ignore aria-hidden="true">
+                    <template x-for="page in pages" :key="page">
+                        <div class="doc-sheet__page" :style="`top: calc(${page - 1} * 305mm)`"></div>
+                    </template>
+                </div>
                 @include('documents.render', ['document' => $preview, 'totals' => $totals, 'isPreview' => true])
             </div>
         </div>
