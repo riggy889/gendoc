@@ -75,6 +75,19 @@ Xdebug connects to `host.docker.internal:9003` and only starts when a trigger (e
 
 If hot reload doesn't pick up changes, set `VITE_USE_POLLING=true` in `.env` and run `docker compose up -d node`. Polling is off by default because it uses more CPU.
 
+## Production
+
+Production runs from Docker images built by GitHub Actions, behind a Caddy reverse proxy. [`DEPLOYMENT.md`](DEPLOYMENT.md) walks through setting up a server from scratch, the environment variables, deploying and rolling back.
+
+| File | Purpose |
+|---|---|
+| [`Dockerfile`](Dockerfile) | Multi-stage build of the `app` (PHP-FPM) and `web` (nginx) images |
+| [`compose.prod.yaml`](compose.prod.yaml) | The production stack: `app`, `web` and `gotenberg`, with no published ports |
+| [`docker/prod/`](docker/prod) | Production PHP, PHP-FPM and nginx config, and the startup script |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | Tests on every push; on `main`, builds and pushes the images, then deploys after approval |
+
+**Why PHP-FPM and nginx rather than a single FrankenPHP container:** it's the same pair the development setup uses, so production behaves like what you run locally, and nginx serves the static assets without involving PHP. The cost is a second (small) image, built from the same Dockerfile.
+
 ## Windows / WSL2
 
 GenDoc is developed on Windows using Docker Desktop with the WSL2 backend. The project must live **inside the WSL2 Linux filesystem** (for example `~/code/gendoc`), **not** under `/mnt/c/...`. Files under `/mnt/c` are slow to access from containers and don't trigger file-change events, so hot reload breaks.
