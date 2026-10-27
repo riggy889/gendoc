@@ -1,0 +1,94 @@
+# Production stack for gendoc.owright.dev. See DEPLOYMENT.md.
+#
+# On the server this file is saved as compose.yaml next to a .env file holding the secrets and
+# IMAGE_TAG (the commit SHA to run). No service publishes a port: Caddy, running as its own
+# compose project, reaches "web" over the shared external "caddy" network.
+name: gendoc
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  app:
+    image: ${GENDOC_IMAGE:-ghcr.io/riggy889/gendoc}-app:${IMAGE_TAG:?Set IMAGE_TAG in .env to the commit SHA to deploy}
+    restart: unless-stopped
+    env_file: .env
+    # Production defaults; a value set in .env takes precedence.
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_DEBUG: ${APP_DEBUG:-false}
+      LOG_CHANNEL: ${LOG_CHANNEL:-stderr}
+      LARAVEL_PDF_DRIVER: ${LARAVEL_PDF_DRIVER:-gotenberg}
+      GOTENBERG_URL: ${GOTENBERG_URL:-http://gotenberg:3000}
+      SESSION_DRIVER: ${SESSION_DRIVER:-file}
+      CACHE_STORE: ${CACHE_STORE:-file}
+    volumes:
+      # Keeps sessions across deploys, so open tabs don't hit "page expired".
+      - sessions:/var/www/html/storage/framework/sessions
+    networks:
+      - internal
+      - pdf
+    depends_on:
+      gotenberg:
+        condition: service_healthy
+    logging: *logging
+
+  web:
+    image: ${GENDOC_IMAGE:-ghcr.io/riggy889/gendoc}-web:${IMAGE_TAG:?Set IMAGE_TAG in .env to the commit SHA to deploy}
+    restart: unless-stopped
+    networks:
+      internal:
+      caddy:
+        # A name Caddy can use that won't clash with other projects' "web" services.
+        aliases:
+          - gendoc-web
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *logging
+
+  # Headless Chromium for PDF rendering. Only on the internal "pdf" network: no internet access.
+  gotenberg:
+    image: gotenberg/gotenberg:8.38.1
+    restart: unless-stopped
+    command:
+      - gotenberg
+      - --chromium-deny-list=^(?!(data:|file:///tmp/)).*
+      - --chromium-disable-javascript=true
+      - --api-timeout=20s
+      # Start Chromium with the container (it is slow to launch), not on the first PDF request.
+      - --chromium-auto-start=true
+      # Turn off features GenDoc doesn't use.
+      - --libreoffice-disable-routes=true
+      - --webhook-disable=true
+      - --log-level=warn
+    networks:
+      - pdf
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      start_interval: 3s
+      retries: 3
+    logging: *logging
+
+# No scheduler service: the app has no scheduled tasks (sessions and cache entries expire on their own).
+
+networks:
+  # app <-> web. Internal, so the PHP app can't make outbound connections to the internet.
+  internal:
+    internal: true
+  # app <-> gotenberg. Internal, so the PDF renderer can't fetch anything from the internet.
+  pdf:
+    internal: true
+  # Shared with the Caddy reverse proxy project; create it once with `docker network create caddy`.
+  caddy:
+    external: true
+    name: web
+
+volumes:
+  sessions:
