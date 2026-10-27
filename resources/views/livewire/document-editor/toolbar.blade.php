@@ -7,7 +7,8 @@
                 <button
                     type="button"
                     wire:click="setType('{{ $option->value }}')"
-                    @if ($type !== $option) x-on:click="track('document_type_changed', { type: '{{ $option->value }}' })" @endif
+                    {{-- Keep this attribute static: Livewire binds wire:click as an Alpine x-on:click, so morphing this one away tears down the wire:click listener too. --}}
+                    x-on:click="$el.getAttribute('aria-pressed') !== 'true' && track('document_type_changed', { type: '{{ $option->value }}' })"
                     aria-pressed="{{ $type === $option ? 'true' : 'false' }}"
                 >
                     {{ $option->title() }}
