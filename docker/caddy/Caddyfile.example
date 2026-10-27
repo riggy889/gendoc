@@ -1,0 +1,7 @@
+# Example entry for the Caddyfile of the separate Caddy project on the server (see DEPLOYMENT.md).
+# Caddy gets and renews the HTTPS certificate automatically, then forwards requests to GenDoc's
+# nginx over the shared "caddy" Docker network.
+gendoc.owright.dev {
+	encode zstd gzip
+	reverse_proxy gendoc-web:8080
+}

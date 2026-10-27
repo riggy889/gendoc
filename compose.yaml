@@ -53,6 +53,11 @@ services:
       - --chromium-deny-list=^(?!(data:|file:///tmp/)).*
       - --chromium-disable-javascript=true
       - --api-timeout=20s
+      # Start Chromium with the container (it is slow to launch), not on the first PDF request.
+      - --chromium-auto-start=true
+      # Turn off features GenDoc doesn't use.
+      - --libreoffice-disable-routes=true
+      - --webhook-disable=true
     networks:
       - pdf
 

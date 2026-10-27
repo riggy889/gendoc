@@ -1,0 +1,148 @@
+# Tests on every push. On main, also builds the production images and (after manual approval)
+# deploys them. See DEPLOYMENT.md for the GitHub settings this needs.
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests, Pint and Larastan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: intl
+          coverage: none
+          tools: composer:v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          composer install --no-interaction --no-progress --prefer-dist
+          npm ci --no-audit --no-fund
+
+      # Page tests need the Vite manifest, and the PDF font tests read the @fontsource packages.
+      - name: Build front-end assets
+        run: npm run build
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Pint, Larastan and Pest
+        run: composer test
+
+  build:
+    name: Build and push images
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/gendoc" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push app image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: app
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}-app:${{ github.sha }}
+            ${{ steps.image.outputs.name }}-app:latest
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,scope=app,mode=max
+
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: web
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}-web:${{ github.sha }}
+            ${{ steps.image.outputs.name }}-web:latest
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+  deploy:
+    name: Deploy to production
+    needs: build
+    runs-on: ubuntu-24.04
+    # The "production" environment requires a reviewer to approve each deploy.
+    environment:
+      name: production
+      url: https://gendoc.owright.dev
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/gendoc' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_deploy ~/.ssh/known_hosts
+
+      - name: Upload the compose file
+        run: scp -i ~/.ssh/id_deploy -P "$DEPLOY_PORT" compose.prod.yaml "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/compose.yaml"
+
+      - name: Pull and start the new images
+        env:
+          IMAGE_SOURCE: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            bash -s -- "$DEPLOY_PATH" "$GITHUB_SHA" "$IMAGE_SOURCE" <<'EOF'
+          set -euo pipefail
+          deploy_path="$1" sha="$2" image_source="$3"
+          cd "$deploy_path"
+          # Point the stack at this commit's images (IMAGE_TAG lives in the server's .env).
+          if grep -q '^IMAGE_TAG=' .env; then
+              sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$sha/" .env
+          else
+              echo "IMAGE_TAG=$sha" >> .env
+          fi
+          docker compose pull
+          docker compose up -d --wait
+          # Remove GenDoc images that are no longer used and over 30 days old (older SHAs stay in GHCR).
+          docker image prune -af --filter "label=org.opencontainers.image.source=$image_source" --filter 'until=720h'
+          EOF

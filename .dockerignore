@@ -1,0 +1,27 @@
+# Keep the build context (and so the images) free of local state, secrets and dev-only files.
+.git
+.github
+.env
+.env.*
+!.env.example
+node_modules
+vendor
+public/build
+public/hot
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+!storage/**/.gitignore
+bootstrap/cache/*.php
+tests
+docker/php
+compose.yaml
+compose.prod.yaml
+*.md
+.phpunit.result.cache
+phpstan.neon
+pint.json
+phpunit.xml
+.idea
+.vscode
